@@ -12,13 +12,6 @@ import {
   Zap
 } from "lucide-react";
 
-// YouTube Video ID Çıkarıcı
-function getVideoId(url: string): string | null {
-  if (!url) return null;
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : null;
-}
-
 export default function App() {
   const [url, setUrl] = useState("");
   const [mediaType, setMediaType] = useState<"video" | "audio">("video");
@@ -47,11 +40,10 @@ export default function App() {
     } catch {}
   };
 
-  // %100 ÇALIŞAN DOĞRUDAN İNDİRME MOTORU
+  // DOĞRUDAN VE TEMİZ YT-DLP İNDİRME MOTORU
   const handleDownload = () => {
-    const videoId = getVideoId(url);
-    if (!videoId) {
-      setError("Geçerli bir YouTube veya Shorts linki yapıştırın!");
+    if (!url.trim()) {
+      setError("Lütfen geçerli bir video linki yapıştırın!");
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -59,30 +51,25 @@ export default function App() {
     setLoading(true);
     setError(null);
 
-    // Format belirleme
-    const format = mediaType === "audio" ? "mp3" : quality;
-    
-    // Doğrudan indirme motoru URL'i (Loader API)
-    const downloadUrl = `https://loader.to/api/button/?url=https://www.youtube.com/watch?v=${videoId}&f=${format}&color=06b6d4`;
+    const downloadEndpoint = `/api/download?url=${encodeURIComponent(url.trim())}&type=${mediaType}&quality=${quality}`;
 
-    const win = window.open(downloadUrl, "_blank");
-    if (!win) {
-      window.location.href = downloadUrl;
-    }
+    const link = document.createElement("a");
+    link.href = downloadEndpoint;
+    link.setAttribute("download", `SHIEL_${Date.now()}.${mediaType === "audio" ? "mp3" : "mp4"}`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
     setTimeout(() => {
       setLoading(false);
-    }, 1000);
+    }, 2000);
   };
 
   return (
     <div className="relative min-h-screen bg-[#02050e] text-white flex flex-col justify-between items-center p-4 sm:p-6 overflow-hidden select-none font-sans">
-      
-      {/* Background Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Header */}
       <header className="w-full max-w-lg z-10 pt-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
@@ -90,7 +77,7 @@ export default function App() {
           </div>
           <span className="text-lg font-bold tracking-wider text-white">SHIEL</span>
           <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-semibold">
-            PRO ENGINE
+            yt-dlp Core
           </span>
         </div>
 
@@ -105,11 +92,8 @@ export default function App() {
         )}
       </header>
 
-      {/* Main Glass Card */}
       <main className="w-full max-w-lg z-10 my-auto py-2">
         <div className="p-6 sm:p-7 rounded-[32px] bg-slate-900/40 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6">
-          
-          {/* Format Switcher */}
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
               Format
@@ -137,7 +121,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Error Banner */}
           {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -145,10 +128,9 @@ export default function App() {
             </div>
           )}
 
-          {/* URL Input */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
-              <span>YouTube Video Linki</span>
+              <span>Medya Linki</span>
               <button 
                 onClick={handlePaste} 
                 className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
@@ -163,7 +145,7 @@ export default function App() {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
+                placeholder="YouTube, Shorts, TikTok linkini yapıştır..."
                 className="w-full px-4 py-3.5 rounded-2xl bg-black/60 border border-white/15 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
               />
               {url && (
@@ -174,7 +156,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quality Grid (Only for video) */}
           {mediaType === "video" && (
             <div className="space-y-2">
               <div className="text-xs text-slate-400 px-1 font-medium flex items-center justify-between">
@@ -213,7 +194,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Download Button */}
           <button
             onClick={handleDownload}
             disabled={!url.trim() || loading}
@@ -226,7 +206,7 @@ export default function App() {
             {loading ? (
               <>
                 <RotateCw className="w-4 h-4 animate-spin text-black" />
-                <span>İndirme Başlatılıyor...</span>
+                <span>İndiriliyor...</span>
               </>
             ) : (
               <>
@@ -238,7 +218,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* iOS PWA Install Modal */}
       {showInstallGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/30 p-6 space-y-4 shadow-2xl">
@@ -277,10 +256,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Footer */}
       <footer className="w-full max-w-lg z-10 pb-2 text-center">
         <div className="text-[11px] text-slate-500 font-medium">
-          SHIEL Pro • Kesintisiz Yüksek Hızlı İndirme
+          SHIEL Core • Sıfır Reklam, Doğrudan İndirme
         </div>
       </footer>
     </div>
