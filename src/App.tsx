@@ -1,5 +1,13 @@
 import React, { useState } from "react";
-import { Download, Copy, RotateCw, Film, Music, Check } from "lucide-react";
+import { 
+  Download, 
+  Copy, 
+  RotateCw,
+  Film,
+  Music,
+  Check,
+  AlertCircle
+} from "lucide-react";
 
 interface QualityOption {
   id: string;
@@ -24,6 +32,15 @@ const AUDIO_QUALITIES: QualityOption[] = [
   { id: "wav", label: "WAV", sub: "HAM SES" },
 ];
 
+// YouTube ID Çıkarıcı
+function extractVideoId(input: string): string | null {
+  if (!input) return null;
+  const decoded = decodeURIComponent(input).trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(decoded)) return decoded;
+  const match = decoded.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [mediaType, setMediaType] = useState<"video" | "audio">("video");
@@ -31,6 +48,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [copied, setCopied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handlePaste = async () => {
     try {
@@ -45,21 +63,85 @@ export default function App() {
     } catch {}
   };
 
-  const handleDownload = () => {
-    if (!url.trim()) return;
-    setLoading(true);
-    setStatusText("Akış taranıyor...");
+  // Tamamen Uygulama İçinde Çalışan Yerel İndirici Motoru
+  const handleDownload = async () => {
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      setErrorMessage("Lütfen geçerli bir YouTube linki yapıştırın!");
+      setTimeout(() => setErrorMessage(null), 3000);
+      return;
+    }
 
-    setTimeout(() => {
-      setStatusText("İndirme başlatılıyor...");
-      const finalUrl = `https://jumpy-flea-4787.neram7a7.deno.net/download?url=${encodeURIComponent(url.trim())}&format=${selectedQuality}`;
-      window.location.href = finalUrl;
+    setLoading(true);
+    setErrorMessage(null);
+    setStatusText("Yerel motor akışı ayrıştırıyor...");
+
+    const DIRECT_ENGINES = [
+      `https://inv.tux.pizza/api/v1/videos/${videoId}`,
+      `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
+      `https://invidious.drgns.space/api/v1/videos/${videoId}`,
+      `https://pipedapi.kavin.rocks/streams/${videoId}`
+    ];
+
+    let directMediaUrl: string | null = null;
+    let videoTitle = "SHIEL_Video";
+
+    for (const engineUrl of DIRECT_ENGINES) {
+      try {
+        setStatusText("CDN akışına bağlanılıyor...");
+        const res = await fetch(engineUrl, {
+          headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        videoTitle = (data.title || "SHIEL_Media").replace(/[/\\?%*:|"<>]/g, "_");
+
+        if (mediaType === "audio") {
+          const audioFormats = data.adaptiveFormats?.filter((f: any) => f.type?.includes("audio/")) || data.audioStreams || [];
+          if (audioFormats.length > 0) {
+            directMediaUrl = audioFormats[0].url;
+            break;
+          }
+        } else {
+          const formatStreams = data.formatStreams || [];
+          const matched = formatStreams.find((f: any) => f.resolution?.includes(selectedQuality.replace("p", ""))) ||
+                          formatStreams[formatStreams.length - 1];
+          
+          if (matched && matched.url) {
+            directMediaUrl = matched.url;
+            break;
+          } else if (data.videoStreams && data.videoStreams.length > 0) {
+            directMediaUrl = data.videoStreams[0].url;
+            break;
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+
+    if (directMediaUrl) {
+      setStatusText("Dosya telefona aktarılıyor...");
+      
+      const a = document.createElement("a");
+      a.href = directMediaUrl;
+      a.download = `${videoTitle}.${mediaType === "audio" ? "mp3" : "mp4"}`;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
       setTimeout(() => {
         setLoading(false);
         setStatusText("");
-      }, 2000);
-    }, 1000);
+      }, 1500);
+    } else {
+      setLoading(false);
+      setStatusText("");
+      setErrorMessage("Akış bulunamadı, lütfen başka bir video deneyin.");
+      setTimeout(() => setErrorMessage(null), 3500);
+    }
   };
 
   const activeQualities = mediaType === "video" ? VIDEO_QUALITIES : AUDIO_QUALITIES;
@@ -77,7 +159,7 @@ export default function App() {
                 SHIEL
               </span>
               <span className="text-[10px] font-bold text-cyan-400 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 uppercase tracking-wider">
-                Liquid Pro
+                Embedded Core
               </span>
             </div>
 
@@ -103,10 +185,20 @@ export default function App() {
             </div>
           </div>
 
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-300 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
               <span>Medya Linki</span>
-              <button onClick={handlePaste} className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer">
+              <button 
+                onClick={handlePaste} 
+                className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+              >
                 {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 <span>{copied ? "Yapıştırıldı" : "Panodan Yapıştır"}</span>
               </button>
@@ -121,7 +213,7 @@ export default function App() {
                 className="w-full px-4 py-3.5 rounded-2xl bg-black/60 border border-white/15 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
               />
               {url && (
-                <button onClick={() => setUrl("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white bg-white/10 rounded-full w-5 h-5 flex items-center justify-center">
+                <button onClick={() => setUrl("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-5 h-5 flex items-center justify-center transition-colors">
                   ✕
                 </button>
               )}
@@ -168,13 +260,13 @@ export default function App() {
             className={`w-full py-4 rounded-2xl font-bold text-sm tracking-wide flex items-center justify-center gap-2 transition-all cursor-pointer ${
               !url.trim() || loading
                 ? "bg-slate-800/40 text-slate-600 border border-white/5 cursor-not-allowed"
-                : "bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 text-black shadow-lg shadow-cyan-500/25 active:scale-[0.98]"
+                : "bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 text-black shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.98]"
             }`}
           >
             {loading ? (
               <>
                 <RotateCw className="w-4 h-4 animate-spin text-black" />
-                <span>{statusText || "Hazırlanıyor..."}</span>
+                <span>{statusText || "İşleniyor..."}</span>
               </>
             ) : (
               <>
