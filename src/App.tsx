@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Download, 
   Copy, 
@@ -6,7 +6,10 @@ import {
   Film, 
   Music, 
   Check, 
-  AlertCircle 
+  AlertCircle,
+  Share,
+  PlusSquare,
+  Zap
 } from "lucide-react";
 
 interface QualityOption {
@@ -14,24 +17,32 @@ interface QualityOption {
   label: string;
   sub: string;
   badge?: string;
-  cobaltQuality?: string;
 }
 
 const VIDEO_QUALITIES: QualityOption[] = [
-  { id: "max", label: "8K/4K", sub: "MAX", badge: "MAX", cobaltQuality: "max" },
-  { id: "1440", label: "2K", sub: "1440p", badge: "QHD", cobaltQuality: "1440" },
-  { id: "1080", label: "1080p", sub: "FHD", badge: "POPÜLER", cobaltQuality: "1080" },
-  { id: "720", label: "720p", sub: "HD", cobaltQuality: "720" },
-  { id: "480", label: "480p", sub: "SD", cobaltQuality: "480" },
-  { id: "360", label: "360p", sub: "HIZLI", cobaltQuality: "360" },
+  { id: "1080", label: "1080p", sub: "FHD", badge: "POPÜLER" },
+  { id: "720", label: "720p", sub: "HD" },
+  { id: "480", label: "480p", sub: "SD" },
+  { id: "360", label: "360p", sub: "HIZLI" },
 ];
 
 const AUDIO_QUALITIES: QualityOption[] = [
   { id: "mp3", label: "MP3", sub: "320 KBPS", badge: "EN İYİ" },
-  { id: "opus", label: "OPUS", sub: "NET SES", badge: "HI-FI" },
-  { id: "aac", label: "AAC", sub: "APPLE STD" },
-  { id: "wav", label: "WAV", sub: "KAYIPSIZ" },
+  { id: "m4a", label: "M4A", sub: "APPLE STD" },
 ];
+
+// YouTube URL Temizleyici (Çalma listesi &list= vb parametreleri temizler)
+function sanitizeMediaUrl(rawUrl: string): { cleanUrl: string; videoId: string | null } {
+  const trimmed = rawUrl.trim();
+  const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return {
+      cleanUrl: `https://www.youtube.com/watch?v=${ytMatch[1]}`,
+      videoId: ytMatch[1]
+    };
+  }
+  return { cleanUrl: trimmed, videoId: null };
+}
 
 export default function App() {
   const [url, setUrl] = useState("");
@@ -41,6 +52,13 @@ export default function App() {
   const [statusText, setStatusText] = useState("");
   const [copied, setCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    setIsStandalone(!!standalone);
+  }, []);
 
   const handlePaste = async () => {
     try {
@@ -55,66 +73,82 @@ export default function App() {
     } catch {}
   };
 
-  // Ultra Hızlı Cobalt v10 Native Engine
+  // Güçlü ve Hatasız İndirme Motoru
   const handleDownload = async () => {
     if (!url.trim()) {
-      setErrorMessage("Lütfen geçerli bir link yapıştırın!");
+      setErrorMessage("Lütfen geçerli bir YouTube veya medya linki yapıştırın!");
       setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
 
     setLoading(true);
     setErrorMessage(null);
-    setStatusText("Cobalt Motoru bağlanıyor...");
+    setStatusText("Link optimize ediliyor...");
 
-    const COBALT_SERVERS = [
-      "https://api.cobalt.tools/api/json",
-      "https://cobalt-api.kwiatekm.com/api/json",
-      "https://co.wuk.sh/api/json"
-    ];
+    const { cleanUrl, videoId } = sanitizeMediaUrl(url);
 
-    const payload: any = {
-      url: url.trim(),
+    // 1. YÖNTEM: Cobalt Global Engine
+    const cobaltPayload = {
+      url: cleanUrl,
       videoQuality: selectedQuality,
-      audioFormat: selectedQuality === "mp3" || selectedQuality === "opus" || selectedQuality === "aac" || selectedQuality === "wav" ? selectedQuality : "mp3",
-      isAudioOnly: mediaType === "audio",
+      audioFormat: mediaType === "audio" ? "mp3" : undefined,
       downloadMode: mediaType === "audio" ? "audio" : "auto",
       youtubeVideoCodec: "h264"
     };
 
-    let downloadUrl: string | null = null;
+    let directDownloadLink: string | null = null;
 
-    for (const server of COBALT_SERVERS) {
+    const COBALT_ENDPOINTS = [
+      "https://api.cobalt.tools/api/json",
+      "https://co.wuk.sh/api/json",
+      "https://cobalt-api.kwiatekm.com/api/json"
+    ];
+
+    for (const endpoint of COBALT_ENDPOINTS) {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-        const response = await fetch(server, {
+        setStatusText("Medya akışı çekiliyor...");
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Accept": "application/json",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(payload),
-          signal: controller.signal
+          body: JSON.stringify(cobaltPayload)
         });
-        clearTimeout(timeoutId);
 
-        if (!response.ok) continue;
-
-        const data = await response.json();
-        if (data && (data.url || data.audio)) {
-          downloadUrl = data.url || data.audio;
-          break;
+        if (res.ok) {
+          const data = await res.json();
+          if (data && (data.url || data.audio)) {
+            directDownloadLink = data.url || data.audio;
+            break;
+          }
         }
       } catch {
         continue;
       }
     }
 
-    if (downloadUrl) {
-      setStatusText("İndirme başlatıldı!");
-      window.location.href = downloadUrl;
+    // 2. YÖNTEM: Eğer Cobalt meşgulse doğrudan Y2Mate / SaveFrom Yönlendirici Köprüsü
+    if (!directDownloadLink && videoId) {
+      setStatusText("Yedek yüksek hızlı akışa geçiliyor...");
+      if (mediaType === "audio") {
+        directDownloadLink = `https://www.y2mate.com/tr/youtube-mp3/${videoId}`;
+      } else {
+        directDownloadLink = `https://ssyoutube.com/watch?v=${videoId}`;
+      }
+    }
+
+    if (directDownloadLink) {
+      setStatusText("İndirme hazır, aktarılıyor...");
+      
+      // Güvenli indirme tetikleme
+      const tempLink = document.createElement("a");
+      tempLink.href = directDownloadLink;
+      tempLink.target = "_blank";
+      tempLink.rel = "noopener noreferrer";
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      document.body.removeChild(tempLink);
 
       setTimeout(() => {
         setLoading(false);
@@ -123,7 +157,7 @@ export default function App() {
     } else {
       setLoading(false);
       setStatusText("");
-      setErrorMessage("Video akışı çözülemedi. Lütfen linki kontrol edin.");
+      setErrorMessage("Medya akışı çözülemedi. Lütfen linki kontrol edin.");
       setTimeout(() => setErrorMessage(null), 3500);
     }
   };
@@ -131,22 +165,43 @@ export default function App() {
   const activeQualities = mediaType === "video" ? VIDEO_QUALITIES : AUDIO_QUALITIES;
 
   return (
-    <div className="relative min-h-screen bg-[#02050e] text-white flex flex-col justify-center items-center p-4 sm:p-6 overflow-hidden select-none font-sans">
+    <div className="relative min-h-screen bg-[#02050e] text-white flex flex-col justify-between items-center p-4 sm:p-6 overflow-hidden select-none font-sans">
+      
+      {/* Background Ambient Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-lg z-10">
-        <div className="p-6 sm:p-7 rounded-[32px] bg-slate-900/40 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-extrabold tracking-wider bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
-                SHIEL
-              </span>
-              <span className="text-[10px] font-bold text-cyan-400 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 uppercase tracking-wider">
-                Cobalt v10
-              </span>
-            </div>
+      {/* Top Header */}
+      <header className="w-full max-w-lg z-10 pt-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <Zap className="w-4 h-4 fill-cyan-400/20" />
+          </div>
+          <span className="text-lg font-bold tracking-wider text-white">SHIEL</span>
+        </div>
 
+        {!isStandalone && (
+          <button
+            onClick={() => setShowInstallGuide(true)}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 hover:bg-white/15 border border-white/10 text-cyan-300 transition-colors cursor-pointer"
+          >
+            <PlusSquare className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Ana Ekrana Ekle</span>
+          </button>
+        )}
+      </header>
+
+      {/* Center Main Glass Panel */}
+      <main className="w-full max-w-lg z-10 my-auto py-2">
+        <div className="p-6 sm:p-7 rounded-[32px] bg-slate-900/40 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6">
+          
+          {/* Header Switcher */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Format Seçimi
+            </span>
+
+            {/* Video / Audio Switcher */}
             <div className="flex p-1 rounded-2xl bg-black/50 border border-white/10">
               <button
                 onClick={() => { setMediaType("video"); setSelectedQuality("1080"); }}
@@ -169,6 +224,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Error Banner */}
           {errorMessage && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -176,6 +232,7 @@ export default function App() {
             </div>
           )}
 
+          {/* Input Box */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
               <span>Medya Linki</span>
@@ -204,13 +261,14 @@ export default function App() {
             </div>
           </div>
 
+          {/* Quality Grid */}
           <div className="space-y-2">
             <div className="text-xs text-slate-400 px-1 font-medium flex items-center justify-between">
-              <span>Çözünürlük & Format</span>
-              <span className="text-[10px] text-cyan-400 uppercase">{selectedQuality.toUpperCase()} Seçili</span>
+              <span>Çözünürlük & Kalite</span>
+              <span className="text-[10px] text-cyan-400 uppercase">{selectedQuality.toUpperCase()} SEÇİLİ</span>
             </div>
 
-            <div className={`grid gap-2 ${mediaType === "video" ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-2 sm:grid-cols-4"}`}>
+            <div className={`grid gap-2 ${mediaType === "video" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2"}`}>
               {activeQualities.map((q) => {
                 const active = selectedQuality === q.id;
                 return (
@@ -238,6 +296,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Action Download Button */}
           <button
             onClick={handleDownload}
             disabled={!url.trim() || loading}
@@ -260,7 +319,53 @@ export default function App() {
             )}
           </button>
         </div>
-      </div>
+      </main>
+
+      {/* iOS PWA Kurulum Rehber Modalı */}
+      {showInstallGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/30 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                <PlusSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">iPhone'a Uygulama Olarak Ekle</h3>
+                <p className="text-xs text-slate-400">Safari PWA Kurulumu (Signer'sız)</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
+                <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
+                <span>Safari'nin en altındaki <strong>Paylaş (Kare + Ok <Share className="w-3 h-3 inline text-cyan-400" />)</strong> butonuna dokun.</span>
+              </div>
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
+                <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
+                <span>Aşağı kaydır ve <strong>"Ana Ekrana Ekle"</strong> seçeneğini seç.</span>
+              </div>
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
+                <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+                <span>Sağ üstteki <strong>"Ekle"</strong> butonuna bas. SHIEL ana ekranına native uygulama olarak gelir!</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              className="w-full py-3 rounded-xl bg-cyan-500 text-black font-bold text-xs shadow-lg cursor-pointer"
+            >
+              Anladım
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <footer className="w-full max-w-lg z-10 pb-2 text-center">
+        <div className="text-[11px] text-slate-500 font-medium">
+          SHIEL Progressive Web App • Otomatik Temizleme & Hızlı Akış
+        </div>
+      </footer>
     </div>
   );
 }
