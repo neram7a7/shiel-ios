@@ -1,0 +1,9 @@
+{
+  "appId": "com.shiel.downloader",
+  "appName": "SHIEL",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always"
+  }
+}
