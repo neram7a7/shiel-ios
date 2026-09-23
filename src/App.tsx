@@ -12,11 +12,18 @@ import {
   Zap
 } from "lucide-react";
 
+function extractVideoId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [mediaType, setMediaType] = useState<"video" | "audio">("video");
   const [quality, setQuality] = useState("1080");
   const [loading, setLoading] = useState(false);
+  const [statusText, setStatusText] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -40,29 +47,40 @@ export default function App() {
     } catch {}
   };
 
-  // DOĞRUDAN VE TEMİZ YT-DLP İNDİRME MOTORU
-  const handleDownload = () => {
-    if (!url.trim()) {
-      setError("Lütfen geçerli bir video linki yapıştırın!");
+  const handleDownload = async () => {
+    const videoId = extractVideoId(url);
+    if (!videoId) {
+      setError("Lütfen geçerli bir YouTube video veya Shorts linki yapıştırın!");
       setTimeout(() => setError(null), 3000);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setStatusText("Medya akışı hazırlanıyor...");
 
-    const downloadEndpoint = `/api/download?url=${encodeURIComponent(url.trim())}&type=${mediaType}&quality=${quality}`;
+    const isAudio = mediaType === "audio";
+    const target = `https://api.vevioz.com/api/button/${isAudio ? 'mp3' : 'videos'}?url=https://www.youtube.com/watch?v=${videoId}`;
 
-    const link = document.createElement("a");
-    link.href = downloadEndpoint;
-    link.setAttribute("download", `SHIEL_${Date.now()}.${mediaType === "audio" ? "mp3" : "mp4"}`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const link = document.createElement("a");
+      link.href = target;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    setTimeout(() => {
+      setTimeout(() => {
+        setLoading(false);
+        setStatusText("");
+      }, 1500);
+    } catch (e) {
       setLoading(false);
-    }, 2000);
+      setStatusText("");
+      setError("İndirme başlatılamadı. Lütfen linki kontrol edin.");
+      setTimeout(() => setError(null), 3500);
+    }
   };
 
   return (
@@ -77,7 +95,7 @@ export default function App() {
           </div>
           <span className="text-lg font-bold tracking-wider text-white">SHIEL</span>
           <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-semibold">
-            yt-dlp Core
+            PWA Standalone
           </span>
         </div>
 
@@ -130,7 +148,7 @@ export default function App() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
-              <span>Medya Linki</span>
+              <span>YouTube Video Linki</span>
               <button 
                 onClick={handlePaste} 
                 className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
@@ -145,7 +163,7 @@ export default function App() {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="YouTube, Shorts, TikTok linkini yapıştır..."
+                placeholder="YouTube veya Shorts linkini yapıştır..."
                 className="w-full px-4 py-3.5 rounded-2xl bg-black/60 border border-white/15 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
               />
               {url && (
@@ -206,7 +224,7 @@ export default function App() {
             {loading ? (
               <>
                 <RotateCw className="w-4 h-4 animate-spin text-black" />
-                <span>İndiriliyor...</span>
+                <span>{statusText || "Hazırlanıyor..."}</span>
               </>
             ) : (
               <>
@@ -258,7 +276,7 @@ export default function App() {
 
       <footer className="w-full max-w-lg z-10 pb-2 text-center">
         <div className="text-[11px] text-slate-500 font-medium">
-          SHIEL Core • Sıfır Reklam, Doğrudan İndirme
+          SHIEL • Direct Stream Engine
         </div>
       </footer>
     </div>
