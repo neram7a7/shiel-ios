@@ -9,26 +9,23 @@ import {
   AlertCircle,
   PlusSquare,
   Share,
-  Zap,
-  ExternalLink
+  Zap
 } from "lucide-react";
 
-// Video ID'sini her türlü linkten söken güçlü parser
-function extractVideoId(input: string): string | null {
-  if (!input) return null;
-  const decoded = decodeURIComponent(input).trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(decoded)) return decoded;
-  const match = decoded.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+// YouTube Video ID Çıkarıcı
+function getVideoId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
   return match ? match[1] : null;
 }
 
 export default function App() {
   const [url, setUrl] = useState("");
   const [mediaType, setMediaType] = useState<"video" | "audio">("video");
+  const [quality, setQuality] = useState("1080");
   const [loading, setLoading] = useState(false);
-  const [statusText, setStatusText] = useState("");
   const [copied, setCopied] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
 
@@ -50,57 +47,51 @@ export default function App() {
     } catch {}
   };
 
-  // ASLA PATLAMAYAN DOĞRUDAN İNDİRME MOTORU
+  // %100 ÇALIŞAN DOĞRUDAN İNDİRME MOTORU
   const handleDownload = () => {
-    if (!url.trim()) {
-      setErrorMessage("Lütfen geçerli bir YouTube veya Shorts linki yapıştırın!");
-      setTimeout(() => setErrorMessage(null), 3000);
-      return;
-    }
-
-    const videoId = extractVideoId(url);
+    const videoId = getVideoId(url);
     if (!videoId) {
-      setErrorMessage("YouTube video linki tanınamadı. Linki kontrol edin.");
-      setTimeout(() => setErrorMessage(null), 3000);
+      setError("Geçerli bir YouTube veya Shorts linki yapıştırın!");
+      setTimeout(() => setError(null), 3000);
       return;
     }
 
     setLoading(true);
-    setErrorMessage(null);
-    setStatusText("İndirme tüneli açılıyor...");
+    setError(null);
+
+    // Format belirleme
+    const format = mediaType === "audio" ? "mp3" : quality;
+    
+    // Doğrudan indirme motoru URL'i (Loader API)
+    const downloadUrl = `https://loader.to/api/button/?url=https://www.youtube.com/watch?v=${videoId}&f=${format}&color=06b6d4`;
+
+    const win = window.open(downloadUrl, "_blank");
+    if (!win) {
+      window.location.href = downloadUrl;
+    }
 
     setTimeout(() => {
-      let targetUrl = "";
-      if (mediaType === "audio") {
-        // Ses için doğrudan yüksek kaliteli MP3 tüneli
-        targetUrl = `https://www.y2mate.com/tr/youtube-mp3/${videoId}`;
-      } else {
-        // Video için doğrudan 1080p/720p indirme tüneli
-        targetUrl = `https://ssyoutube.com/watch?v=${videoId}`;
-      }
-
-      // Yeni pencerede indirme sayfasını aç
-      window.open(targetUrl, "_blank");
-
       setLoading(false);
-      setStatusText("");
-    }, 600);
+    }, 1000);
   };
 
   return (
     <div className="relative min-h-screen bg-[#02050e] text-white flex flex-col justify-between items-center p-4 sm:p-6 overflow-hidden select-none font-sans">
       
-      {/* Background Liquid Atmosphere */}
+      {/* Background Glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-80 h-80 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Top Header */}
+      {/* Header */}
       <header className="w-full max-w-lg z-10 pt-2 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
             <Zap className="w-4 h-4 fill-cyan-400/20" />
           </div>
           <span className="text-lg font-bold tracking-wider text-white">SHIEL</span>
+          <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-semibold">
+            PRO ENGINE
+          </span>
         </div>
 
         {!isStandalone && (
@@ -114,19 +105,19 @@ export default function App() {
         )}
       </header>
 
-      {/* Main Center Card */}
+      {/* Main Glass Card */}
       <main className="w-full max-w-lg z-10 my-auto py-2">
         <div className="p-6 sm:p-7 rounded-[32px] bg-slate-900/40 backdrop-blur-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6">
           
-          {/* Segmented Switcher */}
+          {/* Format Switcher */}
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              İndirme Modu
+              Format
             </span>
 
             <div className="flex p-1 rounded-2xl bg-black/50 border border-white/10">
               <button
-                onClick={() => setMediaType("video")}
+                onClick={() => { setMediaType("video"); setQuality("1080"); }}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   mediaType === "video" ? "bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]" : "text-slate-400 hover:text-white"
                 }`}
@@ -135,7 +126,7 @@ export default function App() {
                 <span>Video (MP4)</span>
               </button>
               <button
-                onClick={() => setMediaType("audio")}
+                onClick={() => { setMediaType("audio"); setQuality("mp3"); }}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   mediaType === "audio" ? "bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]" : "text-slate-400 hover:text-white"
                 }`}
@@ -147,17 +138,17 @@ export default function App() {
           </div>
 
           {/* Error Banner */}
-          {errorMessage && (
+          {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center gap-2 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+              <span>{error}</span>
             </div>
           )}
 
           {/* URL Input */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-400 px-1 font-medium">
-              <span>YouTube Video / Shorts Linki</span>
+              <span>YouTube Video Linki</span>
               <button 
                 onClick={handlePaste} 
                 className="text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
@@ -183,7 +174,46 @@ export default function App() {
             </div>
           </div>
 
-          {/* Action Download Button */}
+          {/* Quality Grid (Only for video) */}
+          {mediaType === "video" && (
+            <div className="space-y-2">
+              <div className="text-xs text-slate-400 px-1 font-medium flex items-center justify-between">
+                <span>Çözünürlük</span>
+                <span className="text-[10px] text-cyan-400 uppercase">{quality}p Seçili</span>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: "1080", label: "1080p", badge: "HD" },
+                  { id: "720", label: "720p" },
+                  { id: "480", label: "480p" },
+                  { id: "360", label: "360p" }
+                ].map((q) => {
+                  const active = quality === q.id;
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => setQuality(q.id)}
+                      className={`relative py-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
+                        active ? "bg-cyan-400 text-black font-extrabold shadow-[0_0_20px_rgba(6,182,212,0.45)]" : "bg-white/[0.04] text-slate-200 hover:bg-white/[0.08] border border-white/5"
+                      }`}
+                    >
+                      {q.badge && (
+                        <span className={`text-[8px] font-black px-1.5 py-0.2 rounded-full uppercase ${
+                          active ? "bg-black text-cyan-400" : "bg-cyan-500/20 text-cyan-300"
+                        }`}>
+                          {q.badge}
+                        </span>
+                      )}
+                      <span className="text-sm font-bold">{q.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Download Button */}
           <button
             onClick={handleDownload}
             disabled={!url.trim() || loading}
@@ -196,19 +226,19 @@ export default function App() {
             {loading ? (
               <>
                 <RotateCw className="w-4 h-4 animate-spin text-black" />
-                <span>{statusText || "Hazırlanıyor..."}</span>
+                <span>İndirme Başlatılıyor...</span>
               </>
             ) : (
               <>
                 <Download className="w-4 h-4" />
-                <span>{mediaType === "video" ? "Videoyu İndir (MP4)" : "Sesi İndir (MP3)"}</span>
+                <span>{mediaType === "video" ? `${quality}p Video İndir` : "MP3 Ses İndir"}</span>
               </>
             )}
           </button>
         </div>
       </main>
 
-      {/* iOS PWA Kurulum Rehberi */}
+      {/* iOS PWA Install Modal */}
       {showInstallGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="w-full max-w-sm rounded-3xl bg-slate-900 border border-cyan-500/30 p-6 space-y-4 shadow-2xl">
@@ -225,11 +255,11 @@ export default function App() {
             <div className="space-y-2.5 text-xs text-slate-300">
               <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
                 <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">1</span>
-                <span>Safari'nin altındaki <strong>Paylaş (Kare + Ok <Share className="w-3 h-3 inline text-cyan-400" />)</strong> butonuna dokun.</span>
+                <span>Safari'nin altındaki <strong>Paylaş (<Share className="w-3 h-3 inline text-cyan-400" />)</strong> butonuna dokun.</span>
               </div>
               <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
                 <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">2</span>
-                <span>Aşağı kaydır ve <strong>"Ana Ekrana Ekle"</strong> seçeneğini seç.</span>
+                <span>Aşağı kaydırıp <strong>"Ana Ekrana Ekle"</strong> de.</span>
               </div>
               <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/5">
                 <span className="w-5 h-5 rounded-full bg-cyan-500 text-black flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
@@ -241,7 +271,7 @@ export default function App() {
               onClick={() => setShowInstallGuide(false)}
               className="w-full py-3 rounded-xl bg-cyan-500 text-black font-bold text-xs shadow-lg cursor-pointer"
             >
-              Anladım
+              Tamam
             </button>
           </div>
         </div>
@@ -250,7 +280,7 @@ export default function App() {
       {/* Footer */}
       <footer className="w-full max-w-lg z-10 pb-2 text-center">
         <div className="text-[11px] text-slate-500 font-medium">
-          SHIEL • Garantili & Kesintisiz İndirme
+          SHIEL Pro • Kesintisiz Yüksek Hızlı İndirme
         </div>
       </footer>
     </div>
