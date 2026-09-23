@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import { 
   Download, 
   Copy, 
-  RotateCw,
-  Film,
-  Music,
-  Check,
-  AlertCircle
+  RotateCw, 
+  Film, 
+  Music, 
+  Check, 
+  AlertCircle 
 } from "lucide-react";
 
 interface QualityOption {
@@ -14,37 +14,29 @@ interface QualityOption {
   label: string;
   sub: string;
   badge?: string;
+  cobaltQuality?: string;
 }
 
 const VIDEO_QUALITIES: QualityOption[] = [
-  { id: "8k", label: "8K", sub: "4320p", badge: "MAX" },
-  { id: "4k", label: "4K", sub: "2160p", badge: "UHD" },
-  { id: "2k", label: "2K", sub: "1440p", badge: "QHD" },
-  { id: "1080p", label: "1080p", sub: "FHD", badge: "POPÜLER" },
-  { id: "720p", label: "720p", sub: "HD" },
-  { id: "480p", label: "480p", sub: "SD" },
+  { id: "max", label: "8K/4K", sub: "MAX", badge: "MAX", cobaltQuality: "max" },
+  { id: "1440", label: "2K", sub: "1440p", badge: "QHD", cobaltQuality: "1440" },
+  { id: "1080", label: "1080p", sub: "FHD", badge: "POPÜLER", cobaltQuality: "1080" },
+  { id: "720", label: "720p", sub: "HD", cobaltQuality: "720" },
+  { id: "480", label: "480p", sub: "SD", cobaltQuality: "480" },
+  { id: "360", label: "360p", sub: "HIZLI", cobaltQuality: "360" },
 ];
 
 const AUDIO_QUALITIES: QualityOption[] = [
-  { id: "mp3", label: "MP3", sub: "320 KBPS", badge: "YÜKSEK" },
-  { id: "flac", label: "FLAC", sub: "KAYIPSIZ", badge: "HI-FI" },
-  { id: "m4a", label: "M4A", sub: "AAC 256K" },
-  { id: "wav", label: "WAV", sub: "HAM SES" },
+  { id: "mp3", label: "MP3", sub: "320 KBPS", badge: "EN İYİ" },
+  { id: "opus", label: "OPUS", sub: "NET SES", badge: "HI-FI" },
+  { id: "aac", label: "AAC", sub: "APPLE STD" },
+  { id: "wav", label: "WAV", sub: "KAYIPSIZ" },
 ];
-
-// YouTube ID Çıkarıcı
-function extractVideoId(input: string): string | null {
-  if (!input) return null;
-  const decoded = decodeURIComponent(input).trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(decoded)) return decoded;
-  const match = decoded.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : null;
-}
 
 export default function App() {
   const [url, setUrl] = useState("");
   const [mediaType, setMediaType] = useState<"video" | "audio">("video");
-  const [selectedQuality, setSelectedQuality] = useState("1080p");
+  const [selectedQuality, setSelectedQuality] = useState("1080");
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [copied, setCopied] = useState(false);
@@ -63,74 +55,66 @@ export default function App() {
     } catch {}
   };
 
-  // Tamamen Uygulama İçinde Çalışan Yerel İndirici Motoru
+  // Ultra Hızlı Cobalt v10 Native Engine
   const handleDownload = async () => {
-    const videoId = extractVideoId(url);
-    if (!videoId) {
-      setErrorMessage("Lütfen geçerli bir YouTube linki yapıştırın!");
+    if (!url.trim()) {
+      setErrorMessage("Lütfen geçerli bir link yapıştırın!");
       setTimeout(() => setErrorMessage(null), 3000);
       return;
     }
 
     setLoading(true);
     setErrorMessage(null);
-    setStatusText("Yerel motor akışı ayrıştırıyor...");
+    setStatusText("Cobalt Motoru bağlanıyor...");
 
-    const DIRECT_ENGINES = [
-      `https://inv.tux.pizza/api/v1/videos/${videoId}`,
-      `https://invidious.nerdvpn.de/api/v1/videos/${videoId}`,
-      `https://invidious.drgns.space/api/v1/videos/${videoId}`,
-      `https://pipedapi.kavin.rocks/streams/${videoId}`
+    const COBALT_SERVERS = [
+      "https://api.cobalt.tools/api/json",
+      "https://cobalt-api.kwiatekm.com/api/json",
+      "https://co.wuk.sh/api/json"
     ];
 
-    let directMediaUrl: string | null = null;
-    let videoTitle = "SHIEL_Video";
+    const payload: any = {
+      url: url.trim(),
+      videoQuality: selectedQuality,
+      audioFormat: selectedQuality === "mp3" || selectedQuality === "opus" || selectedQuality === "aac" || selectedQuality === "wav" ? selectedQuality : "mp3",
+      isAudioOnly: mediaType === "audio",
+      downloadMode: mediaType === "audio" ? "audio" : "auto",
+      youtubeVideoCodec: "h264"
+    };
 
-    for (const engineUrl of DIRECT_ENGINES) {
+    let downloadUrl: string | null = null;
+
+    for (const server of COBALT_SERVERS) {
       try {
-        setStatusText("CDN akışına bağlanılıyor...");
-        const res = await fetch(engineUrl, {
-          headers: { "Accept": "application/json" }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+        const response = await fetch(server, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
-        if (!res.ok) continue;
+        clearTimeout(timeoutId);
 
-        const data = await res.json();
-        videoTitle = (data.title || "SHIEL_Media").replace(/[/\\?%*:|"<>]/g, "_");
+        if (!response.ok) continue;
 
-        if (mediaType === "audio") {
-          const audioFormats = data.adaptiveFormats?.filter((f: any) => f.type?.includes("audio/")) || data.audioStreams || [];
-          if (audioFormats.length > 0) {
-            directMediaUrl = audioFormats[0].url;
-            break;
-          }
-        } else {
-          const formatStreams = data.formatStreams || [];
-          const matched = formatStreams.find((f: any) => f.resolution?.includes(selectedQuality.replace("p", ""))) ||
-                          formatStreams[formatStreams.length - 1];
-          
-          if (matched && matched.url) {
-            directMediaUrl = matched.url;
-            break;
-          } else if (data.videoStreams && data.videoStreams.length > 0) {
-            directMediaUrl = data.videoStreams[0].url;
-            break;
-          }
+        const data = await response.json();
+        if (data && (data.url || data.audio)) {
+          downloadUrl = data.url || data.audio;
+          break;
         }
-      } catch (err) {
+      } catch {
         continue;
       }
     }
 
-    if (directMediaUrl) {
-      setStatusText("Dosya telefona aktarılıyor...");
-      
-      const a = document.createElement("a");
-      a.href = directMediaUrl;
-      a.download = `${videoTitle}.${mediaType === "audio" ? "mp3" : "mp4"}`;
-      a.target = "_blank";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+    if (downloadUrl) {
+      setStatusText("İndirme başlatıldı!");
+      window.location.href = downloadUrl;
 
       setTimeout(() => {
         setLoading(false);
@@ -139,7 +123,7 @@ export default function App() {
     } else {
       setLoading(false);
       setStatusText("");
-      setErrorMessage("Akış bulunamadı, lütfen başka bir video deneyin.");
+      setErrorMessage("Video akışı çözülemedi. Lütfen linki kontrol edin.");
       setTimeout(() => setErrorMessage(null), 3500);
     }
   };
@@ -159,13 +143,13 @@ export default function App() {
                 SHIEL
               </span>
               <span className="text-[10px] font-bold text-cyan-400 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 uppercase tracking-wider">
-                Embedded Core
+                Cobalt v10
               </span>
             </div>
 
             <div className="flex p-1 rounded-2xl bg-black/50 border border-white/10">
               <button
-                onClick={() => { setMediaType("video"); setSelectedQuality("1080p"); }}
+                onClick={() => { setMediaType("video"); setSelectedQuality("1080"); }}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   mediaType === "video" ? "bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]" : "text-slate-400 hover:text-white"
                 }`}
@@ -209,7 +193,7 @@ export default function App() {
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="YouTube veya Shorts linkini buraya yapıştır..."
+                placeholder="YouTube, Shorts, TikTok veya Instagram linki..."
                 className="w-full px-4 py-3.5 rounded-2xl bg-black/60 border border-white/15 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/30 transition-all font-mono"
               />
               {url && (
